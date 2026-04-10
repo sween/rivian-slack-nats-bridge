@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-rivian-tokens
+  labels:
+    app: slack-nats-bridge
+    release: {{ .Release.Name }}
+type: Opaque
+stringData:
+  rivian_tokens.json: |-
+    {
+      "access_token": "mock-access-token",
+      "refresh_token": "mock-refresh-token",
+      "user_session_token": "mock-user-session-token",
+      "expires_in": 3600
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-slack-nats-bridge
+  labels:
+    app: slack-nats-bridge
+    release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      app: slack-nats-bridge
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: slack-nats-bridge
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: slack2nats
+          image: "sween/slack2nats:latest"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            - name: SLACK_SIGNING_SECRET
+              value: "xoxb-mock-secret"
+            - name: SLACK_BOT_TOKEN
+              value: "xapp-mock-token"
+            - name: NATS_URL
+              value: "nats://nats-deezwatts.tail8bd8b6.ts.net:4222"
+        - name: nats2rivian
+          image: "sween/nats2rivian:latest"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            - name: NATS_URL
+              value: "nats://nats-deezwatts.tail8bd8b6.ts.net:4222"
+            - name: RIVIAN_USERNAME
+              value: "sween+api@linux.com"
+            - name: RIVIAN_PASSWORD
+              value: "12345"
+            - name: GEMINI_API_KEY
+              value: "AIzaYourTokensNotMine..."
+          volumeMounts:
+            - name: token-volume
+              mountPath: /data
+              readOnly: true
+      volumes:
+        - name: token-volume
+          secret:
+            secretName: {{ .Release.Name }}-rivian-tokens
